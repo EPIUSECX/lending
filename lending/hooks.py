@@ -10,7 +10,7 @@ app_logo_url = "/assets/lending/images/frappe-lending-logo.svg"
 add_to_apps_screen = [
 	{
 		"name": "lending",
-		"logo": "/assets/lending/images/frappe-lending-logo.svg",
+		"logo": "/assets/lending/images/lending-logo.svg",
 		"title": "Lending",
 		"route": "/app/lending",
 		"has_permission": "lending.utils.check_app_permission",
