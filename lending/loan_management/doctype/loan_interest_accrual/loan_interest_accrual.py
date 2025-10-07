@@ -338,7 +338,7 @@ def calculate_accrual_amount_for_loans(
 
 	total_payable_interest = 0
 
-	if loan_accrual_frequency == None:
+	if loan_accrual_frequency is None:
 		loan_accrual_frequency = frappe.db.get_value("Company", loan.company, "loan_accrual_frequency")
 
 	if loan.is_term_loan:
@@ -1213,3 +1213,10 @@ def add_maturity_breaks(parent_wise_schedules, schedules_details, posting_date):
 			parent_wise_schedules[schedule.name].append(getdate(to_accrual_date))
 
 	return maturity_map
+
+
+def on_doctype_update():
+	frappe.db.add_index(
+		"Loan Interest Accrual",
+		["loan", "docstatus", "interest_type", "posting_date"],
+	)
