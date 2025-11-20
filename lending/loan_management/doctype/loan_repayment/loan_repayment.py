@@ -215,7 +215,7 @@ class LoanRepayment(AccountsController):
 				"loan_repayment",
 				self.name,
 				self.applicant if self.applicant_type == "Customer" else None,
-				self.posting_date,
+				self.value_date,
 				self.company,
 				self.get("prepayment_charges"),
 			)
@@ -224,7 +224,11 @@ class LoanRepayment(AccountsController):
 			reversed_accruals += self.reverse_future_accruals_and_demands()
 
 		if self.principal_amount_paid < self.pending_principal_amount:
-			if self.is_term_loan and self.repayment_type in ("Advance Payment", "Pre Payment"):
+			if (
+				self.is_term_loan
+				and self.repayment_type in ("Advance Payment", "Pre Payment")
+				or self.get("prepayment_charges")
+			):
 				amounts = calculate_amounts(
 					self.against_loan,
 					self.value_date,
@@ -235,17 +239,18 @@ class LoanRepayment(AccountsController):
 				self.allocate_amount_against_demands(amounts, on_submit=True)
 				self.db_update_all()
 
-				create_update_loan_reschedule(
-					self.against_loan,
-					self.value_date,
-					self.name,
-					self.repayment_type,
-					self.principal_amount_paid,
-					self.unbooked_interest_paid,
-					loan_disbursement=self.loan_disbursement,
-				)
+				if self.repayment_type in ("Advance Payment", "Pre Payment"):
+					create_update_loan_reschedule(
+						self.against_loan,
+						self.value_date,
+						self.name,
+						self.repayment_type,
+						self.principal_amount_paid,
+						self.unbooked_interest_paid,
+						loan_disbursement=self.loan_disbursement,
+					)
 
-				self.process_reschedule()
+					self.process_reschedule()
 
 		if self.repayment_type not in ("Advance Payment", "Pre Payment") or (
 			self.principal_amount_paid >= self.pending_principal_amount
@@ -3000,13 +3005,34 @@ def get_latest_accrual_date(
 
 def get_unbooked_interest(loan, posting_date, loan_disbursement=None, last_demand_date=None):
 	precision = cint(frappe.db.get_default("currency_precision")) or 2
+	balance_interest = 0
 
 	accrued_interest = get_accrued_interest(
 		loan, posting_date, loan_disbursement=loan_disbursement, last_demand_date=last_demand_date
 	)
 	unbooked_interest = flt(accrued_interest, precision)
 
+	if last_demand_date:
+		balance_interest = flt(
+			get_balance_interest(loan, last_demand_date, loan_disbursement=loan_disbursement), precision
+		)
+
+		unbooked_interest = unbooked_interest + balance_interest
+
 	return unbooked_interest
+
+
+def get_balance_interest(loan, last_demand_date, loan_disbursement=None):
+	filters = {"loan": loan, "docstatus": 1, "restructure_date": (">=", last_demand_date)}
+
+	if loan_disbursement:
+		filters["loan_disbursement"] = loan_disbursement
+
+	balance_interest = frappe.db.get_value(
+		"Loan Restructure", filters, "balance_unaccrued_interest", order_by="restructure_date desc"
+	)
+
+	return balance_interest
 
 
 def get_accrued_interest(
